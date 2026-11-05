@@ -39,7 +39,7 @@ class DesktopGuiTests(unittest.TestCase):
         self.app._refresh_log()
         self.assertEqual(len(self.app.tree.get_children()), 1)
         first = self.app.tree.item(self.app.tree.get_children()[0])["values"]
-        self.assertEqual(first[2], "JA2BBB")
+        self.assertEqual(first[3], "JA2BBB")
         self.assertIn("計 1 件", self.app.log_summary_var.get())
 
     def test_external_csv_change_appears_on_periodic_refresh(self):
@@ -51,6 +51,28 @@ class DesktopGuiTests(unittest.TestCase):
         self.root.after(1150, self.root.quit)
         self.root.mainloop()
         self.assertEqual(len(self.app.tree.get_children()), 1)
+
+    def test_radio_frequency_auto_switches_and_invalidates_previous_candidate(self):
+        from cwcontest.contest_radio import classify_radio
+        from cwcontest.radio_monitor import RadioUpdate
+        self.app.call_var.set("JA1AAA")
+        self.app.nr_var.set("11M")
+        self.app.start_var.set("2026-04-25 21:00")
+        self.app.end_var.set("2026-04-26 21:00")
+        self.app._on_save()
+        self.app.selected_station = "JA2BBB"
+        self.app.radio_events.put(RadioUpdate(classify_radio(7_025_000, "CW")))
+        self.app._poll_radio_events()
+        self.assertIn("7.025000", self.app.radio_var.get())
+        self.app.selected_station = "JA2BBB"
+        self.app.radio_events.put(RadioUpdate(classify_radio(14_060_000, "CW")))
+        self.app._poll_radio_events()
+        self.assertIn("14.060000", self.app.radio_var.get())
+        self.assertIsNone(self.app.selected_station)
+        self.app.radio_events.put(RadioUpdate(None, "通信切断"))
+        self.app._poll_radio_events()
+        self.assertIsNone(self.app.radio_state)
+        self.assertIn("通信切断", self.app.radio_var.get())
 
     def test_close_reopen_log_still_refreshes(self):
         self.app._close_log_window()

@@ -1,4 +1,4 @@
-# JARL CW AutoContest Rev.A / v0.4.0 (IC-7300 / Windows GUI)
+# JARL CW AutoContest Rev.A / v0.5.0 (IC-7300 / Windows GUI + CI-V/交信済み局)
 
 **IC-7300（初代）を第一基準機としたWindows PC完結型のCWコンテスト交信試作**。
 
@@ -7,6 +7,8 @@
 - USB Audio入力をPCM WAVに録音する機能（実機未検証）。単一局のCW音をWAVから復号する実験的デコーダー。
 - オペレーター承認付きのQSO状態機械（送受信のソフトウェア結線なし、手順のユニットテストのみ）。
 - 既存のALL JA/全市全郡ログ集計、JARL R2.1ドラフト、Excel確認用CSV。**既存コアは維持**。
+
+**v0.5.0追加：** 内部SQLiteによる交信済み局リスト、開催期間（JST）の指定、CI-Vで現在周波数とモードを約1秒間隔で読取、表示バンドの切替・モード確認、バンド別既交信除外候補判定を実装。GUIの自動局選択はライブCW復号に未接続。送信禁止は維持。詳細は [`docs/CI_V_WORKED_LIST.md`](docs/CI_V_WORKED_LIST.md)。
 
 **v0.4.0 Windowsデスクトップ版：** `tkinter`/`ttk`で自局コールサイン・送信ナンバー・コンテスト・バンドの設定画面と、別ウィンドウの交信ログ自動更新画面を実装。GUIはデフォルト送信禁止。IC-7300の実USB受信・CW送信・DeepCW・自動交信とはまだ連動していない。Windows用EXEの作成手順と使用方法は[`docs/WINDOWS_DESKTOP.md`](docs/WINDOWS_DESKTOP.md)。
 
@@ -58,6 +60,7 @@ PYTHONPATH=src python -m cwcontest export --config examples/allja2026_demo.json 
 
 ## 関連資料
 
+- [`docs/CI_V_WORKED_LIST.md`](docs/CI_V_WORKED_LIST.md) – CI-V周波数・モード受信、SQLite交信済み除外、テスト対象
 - [`docs/WINDOWS_DESKTOP.md`](docs/WINDOWS_DESKTOP.md) – Windows単独EXE、設定画面、別ウィンドウログ、保存場所と検証状態
 - [`SPEC.md`](SPEC.md) – 全体仕様（既存のv0.2.0基本方針を維持し、v0.3.0追補あり）
 - [`docs/USB_IO_DESIGN.md`](docs/USB_IO_DESIGN.md) – 初期USB分離設計
