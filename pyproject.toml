@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=75,<83"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jarl-cw-autocontest"
+version = "0.5.0"
+description = "IC-7300-first JARL CW contest experiment with fail-closed controls"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+radio = ["pyserial==3.5"]
+audio = ["sounddevice==0.5.6"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

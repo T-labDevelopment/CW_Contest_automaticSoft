@@ -1,58 +1,73 @@
-# JARL CW AutoContest Rev.A / 0.1.0
+# JARL CW AutoContest Rev.A / v0.5.0 (IC-7300 / Windows GUI + CI-V/交信済み局)
 
-JARL国内コンテスト向け自動CW交信装置の開発リポジトリです。
+**IC-7300（初代）を第一基準機としたWindows PC完結型のCWコンテスト交信試作**。
 
-**現段階で動作するのは、オフラインCSV入力からのログ検査、重複判定、得点・マルチ集計、JARL R2.1形式（ドラフト）およびExcelレビュー用CSVの出力だけです。**
-CWの受信解読、キーイング、CAT、zLogのライブ連携、実RF送信、自動QSO、提出サイトへの送信は未実装です。
-JARLによるファイル受理確認、法令適合性・完全自動交信のコンテスト参加可否も未検証です。
+現在の達成範囲：
+- IC-7300 CI-Vのフレーム構築と模擬応答付き読取（周波数、CWモード、BK-IN、TX状態）、最大30文字のCWメッセージ送信コマンド、FFh中止コマンド。
+- USB Audio入力をPCM WAVに録音する機能（実機未検証）。単一局のCW音をWAVから復号する実験的デコーダー。
+- オペレーター承認付きのQSO状態機械（送受信のソフトウェア結線なし、手順のユニットテストのみ）。
+- 既存のALL JA/全市全郡ログ集計、JARL R2.1ドラフト、Excel確認用CSV。**既存コアは維持**。
 
-## 実行環境
+**v0.5.0追加：** 内部SQLiteによる交信済み局リスト、開催期間（JST）の指定、CI-Vで現在周波数とモードを約1秒間隔で読取、表示バンドの切替・モード確認、バンド別既交信除外候補判定を実装。GUIの自動局選択はライブCW復号に未接続。送信禁止は維持。詳細は [`docs/CI_V_WORKED_LIST.md`](docs/CI_V_WORKED_LIST.md)。
 
-- Python 3.13.5 / 標準ライブラリのみ（初期動作確認バージョン）
-- `git` 2.47.3 で作業リポジトリをローカル生成
-- 各開発情報はgit対象。サンプルの架空局はテスト専用。
+**v0.4.0 Windowsデスクトップ版：** `tkinter`/`ttk`で自局コールサイン・送信ナンバー・コンテスト・バンドの設定画面と、別ウィンドウの交信ログ自動更新画面を実装。GUIはデフォルト送信禁止。IC-7300の実USB受信・CW送信・DeepCW・自動交信とはまだ連動していない。Windows用EXEの作成手順と使用方法は[`docs/WINDOWS_DESKTOP.md`](docs/WINDOWS_DESKTOP.md)。
 
-## 使い方
+**v0.3.1仕様追補（実行コードは0.3.0のまま）**：パイルアップでは全局の同時受信・復号を必須とせず、交信可能な1局の選択・追跡・再送要求を優先。DeepCW公開エンジンを第一評価候補とする。現段階では仕様のみで、実装・実機検証は未実施。詳細は[`docs/PILEUP_SELECTION_DESIGN.md`](docs/PILEUP_SELECTION_DESIGN.md)。
+
+**v0.3.2先行事例レビュー（設計のみ）**：DeepCW、DitStorm、Kvasha、zLog/cwListener、Morse Runner、CWSDを調査。自動交信とマクロ操作の差を明示し、自局宛て判定・選局固定・未確定番号送信拒否・帯域占有時のCQ抑制を要求事項に追加。詳細は[`docs/PRECEDENTS_AUTOMATED_CW_2026-11-05.md`](docs/PRECEDENTS_AUTOMATED_CW_2026-11-05.md)。
+
+**未実装**：USB AudioのライブCW自動解読と連動交信、多数局・QRM・QSBの復号、完成QSOの自動ログ追記、zLogへのライブ同期、JARL提出サイトへの自動提出、実機USB接続とRF送出実証。JARLで自律ロボット局が参加可能かどうかも未確認。送信機能はデフォルト無効。
+
+## Windows画面の起動
+
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m cwcontest desktop
+```
+
+Windowsで単独実行EXEをビルドするには `powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1` を実行。生成物は `dist\IC7300_CW_AutoContest.exe`（**ビルドがWindowsで成功した場合のみ**）。この環境ではWindows実行ファイルの生成・検証は未実施。
+
+## 動作環境
+
+Python 3.13.5でテスト（標準ライブラリのテスト部分）。実機機能はWindowsのIC-7300用USBドライバーと次のオプションを使用します。
+
+- `pyserial==3.5`（CI-V仮想COM）
+- `sounddevice==0.5.6`（USB Audio）
+- Python `>=3.11`、テストで使用した開発環境は3.13.5
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[radio,audio]"
+python -m cwcontest radio-check --port COM4
+python -m cwcontest audio-devices
+python -m cwcontest audio-record --device 3 --seconds 10 --out rx.wav
+python -m cwcontest decode-wav --wav rx.wav --tone 700
+```
+
+**COM4、device 3は例であり自動検出値ではありません。** 接続前に公式USBドライバーを導入してください。送信コマンドの確認・送信停止・実機手順は[`docs/IC7300_INTEGRATION.md`](docs/IC7300_INTEGRATION.md)参照。
+
+既存のログ機能は従来どおり：
 
 ```bash
 PYTHONPATH=src python -m cwcontest audit --config examples/allja2026_demo.json --csv examples/allja2026_demo.csv
 PYTHONPATH=src python -m unittest discover -s tests -v
-# 実運用の交信データと本人確認済みの情報をセットしてから、本人の意思で実行:
 PYTHONPATH=src python -m cwcontest export --config examples/allja2026_demo.json --csv examples/allja2026_demo.csv --out output --confirm
 ```
 
-サンプルは**過去の2026年ALL JA・架空コールサイン・架空の個人情報**で、提出してはいけません。
-`--confirm` は宣誓・署名欄について利用者本人がレビューしたことを示す操作です。生成ファイルはアップロードしません。
+提出ファイル生成は利用者の確認のうえでのみ実行。サンプルは架空QSO/架空個人情報なので実提出不可。JARL R2.1ファイルの実受理は未確認。
 
-## QSO入力CSV
+## 関連資料
 
-`time_jst,band,mode,callsign,sent_rst,sent_nr,rcvd_rst,rcvd_nr,completed`
+- [`docs/CI_V_WORKED_LIST.md`](docs/CI_V_WORKED_LIST.md) – CI-V周波数・モード受信、SQLite交信済み除外、テスト対象
+- [`docs/WINDOWS_DESKTOP.md`](docs/WINDOWS_DESKTOP.md) – Windows単独EXE、設定画面、別ウィンドウログ、保存場所と検証状態
+- [`SPEC.md`](SPEC.md) – 全体仕様（既存のv0.2.0基本方針を維持し、v0.3.0追補あり）
+- [`docs/USB_IO_DESIGN.md`](docs/USB_IO_DESIGN.md) – 初期USB分離設計
+- [`docs/IC7300_INTEGRATION.md`](docs/IC7300_INTEGRATION.md) – IC-7300具体的な接続・安全・コマンド仕様
+- [`docs/PILEUP_SELECTION_DESIGN.md`](docs/PILEUP_SELECTION_DESIGN.md) – DeepCW調査、1局選択型パイルアップ処理・検証項目
+- [`docs/PRECEDENTS_AUTOMATED_CW_2026-11-05.md`](docs/PRECEDENTS_AUTOMATED_CW_2026-11-05.md) – 国内外先行例の実際の自動化範囲・採用する設計要件
+- [`profiles/ic7300_usb.json`](profiles/ic7300_usb.json) – 実行用の送信禁止プロファイル
+- [`profiles/ic7300_usb_draft.json`](profiles/ic7300_usb_draft.json) – v0.2.0以前の資料（削除せず保持）
 
-- `time_jst`: **交信完了時刻**。`2026-04-25T21:10:00+09:00` のような秒・TZ付きJST
-- `band`: MHz単位の文字列（例 `7`）。`mode`: `CW`
-- `sent_rst` `rcvd_rst`: 3桁RST（例 599）
-- `sent_nr` `rcvd_nr`: **RSTを除外**した交換ナンバー（例 10M、25P）
-- `completed`: true / false。trueのみ電子ログへ出力、falseはレビューCSVに保持
-- 同一バンド・同一局の重複QSOは得点0、記録は保持。時刻順に早いものを得点対象とする
-- `scoring_bands` 外の交信は提出ログへ保持するが得点は0
-- 終了時刻ジャストに完了した交信は期間外
-
-## 対応状況と制約
-
-- ALL JA / 全市全郡の基本的なCWナンバー形式、ログ記録と得点の概略を実装。
-- **全市全郡の市郡区コード実在照合は未実装**（文字数のみを検査）。
-- **カテゴリーコードの適法・部門・空中線電力整合検証、FD固有ルール、6m AND DOWN、支部ローカルルール、交信時刻の確定判断は未実装**。運用前に対応追加とJARL確認が必要。
-- QSOの日時/交換内容の正確性を機械で保証するものではありません。
-- ExcelレビューCSVはExcelの表計算用。zLog CSV形式との互換性は検証していません。
-- JARL R2.1形式は公式資料に基づく試作出力ですが、提出先の受理を確認していません。
-- 受信した符号を自動採番する場合、信号の再確認・訂正・コンテスト中のログ確定の仕様を別途設計します。
-
-## 公式根拠（2026年11月5日参照）
-
-- https://www.jarl.org/Japanese/1_Tanoshimo/1-1_Contest/allja_rules.html
-- https://www.jarl.org/Japanese/1_Tanoshimo/1-1_Contest/acag_rules.html
-- https://www.jarl.org/Japanese/1_Tanoshimo/1-1_Contest/logformat.html
-- https://www.jarl.org/Japanese/1_Tanoshimo/1-1_Contest/q_and_a.html
-- https://use.zlog.org/manual/zLog%E3%81%A7%E3%81%A7%E3%81%8D%E3%82%8B%E3%81%93%E3%81%A8.html
-
-仕様詳細は `SPEC.md` を参照してください。
+変更履歴はローカルGit管理。GitHubへのアップロード・同期は未実施です。

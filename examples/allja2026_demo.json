@@ -1,0 +1,15 @@
+{
+  "contest_id": "ALL_JA",
+  "contest_name": "ALL JAコンテスト",
+  "start_jst": "2026-04-25T21:00:00+09:00",
+  "end_jst": "2026-04-26T21:00:00+09:00",
+  "category_code": "C7M",
+  "station_callsign": "JA1AAA",
+  "scoring_bands": ["7"],
+  "address": "東京都内・テストデータ",
+  "name": "架空のテスト局",
+  "email": "test@example.invalid",
+  "power_w": 50,
+  "date_signed": "2026年4月26日",
+  "signature": "架空のテスト局"
+}

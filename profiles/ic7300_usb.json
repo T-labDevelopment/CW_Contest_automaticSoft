@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.3.0-ic7300",
+  "radio_model": "ICOM IC-7300",
+  "verified_with_hardware": false,
+  "platform": "Windows 11",
+  "usb": {
+    "description": "one rear USB-B cable to PC: USB Audio + CI-V virtual COM",
+    "audio_input_device_index": null,
+    "audio_sample_rate_hz": 48000,
+    "audio_signal": "AF",
+    "cw_tone_hz": 700,
+    "com_port": null,
+    "baud_rate": 115200,
+    "civ_address_hex": "94"
+  },
+  "keying": {
+    "preferred_backend": "icom_civ_cw",
+    "civ_command_hex": "17",
+    "civ_max_message_characters": 30,
+    "civ_abort_data_hex": "FF",
+    "usb_keying_line": null,
+    "transmit_enabled": false
+  },
+  "radio_menu_expected": {
+    "USB Serial Function": "CI-V",
+    "CI-V Address": "94h",
+    "CI-V USB Baud Rate": "115200",
+    "CI-V USB Port": "Unlink from [REMOTE]",
+    "CI-V USB Echo Back": "OFF",
+    "ACC/USB Output Select": "AF",
+    "USB SEND": "OFF",
+    "USB Keying (CW)": "OFF",
+    "USB Keying (RTTY)": "OFF",
+    "Inhibit Timer at USB Connection": "ON",
+    "Mode": "CW",
+    "Break-in": "Semi or Full ON for CW text RF send"
+  },
+  "warnings": [
+    "Hardware not tested; NO automatic or periodic RF transmission is implemented.",
+    "User must enable transmit_enabled manually and use --arm-rf and --menu-checked.",
+    "Radio side frequency, antenna, licensing and other contest constraints are operator responsibility.",
+    "CI-V ACK is not a radio TX completion event, do not resend automatically.",
+    "Do not let another software (zLog etc.) open the same COM port concurrently."
+  ]
+}

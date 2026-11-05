@@ -1,0 +1,32 @@
+{
+  "schema_version": "0.2.0-design-only",
+  "radio_model": "ICOM IC-7300",
+  "verified_with_hardware": false,
+  "audio": {
+    "source": "usb_audio",
+    "device_name": null,
+    "signal": "AF",
+    "sample_rate_hz": null
+  },
+  "control": {
+    "transport": "usb_virtual_serial",
+    "com_port": null,
+    "civ_address_hex": "94",
+    "baud_rate": null
+  },
+  "keying": {
+    "preferred_backend": "icom_civ_cw",
+    "fallback_backends": ["usb_serial_dtr_rts", "external_usb_key"],
+    "civ_command_hex": "17",
+    "civ_max_message_characters": 30,
+    "civ_abort_data_hex": "FF",
+    "usb_keying_line": null,
+    "transmit_enabled": false
+  },
+  "notes": [
+    "Configuration sample only. No live device control implementation.",
+    "CI-V CW and USB DTR/RTS are alternative methods, not concurrent keying outputs.",
+    "Do not automatically select a COM port, keying line, or transmit-enabled mode.",
+    "Confirm CW mode, break-in, timing, keying safety and RF operation on real radio."
+  ]
+}
