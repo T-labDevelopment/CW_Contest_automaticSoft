@@ -101,13 +101,14 @@ class IC7300:
     must also leave USB SEND and USB KEYING (CW) disabled for this backend.
     """
 
-    def __init__(self, connection: SerialLike, timeout_s: float = 1.5):
+    def __init__(self, connection: SerialLike, timeout_s: float = 1.5, radio_address: int = RADIO_ADDRESS):
         self.serial = connection
+        self.radio_address = radio_address
         self.timeout_s = timeout_s
         self.parser = FrameParser()
 
     @classmethod
-    def open_port(cls, port: str, baud: int = 115200):
+    def open_port(cls, port: str, baud: int = 115200, radio_address: int = RADIO_ADDRESS):
         try:
             import serial  # pyserial==3.5, optional until real hardware testing
         except ImportError as exc:
@@ -123,7 +124,7 @@ class IC7300:
             conn.open()
         except Exception as exc:
             raise CIVError(f"cannot open port: {exc}") from exc
-        return cls(conn)
+        return cls(conn, radio_address=radio_address)
 
     def close(self):
         self.serial.close()
@@ -135,20 +136,27 @@ class IC7300:
         self.close()
 
     def _transaction(self, command: bytes, response_prefix: bytes) -> bytes:
-        frame = make_frame(command)
+        frame = make_frame(command, destination=self.radio_address)
         written = self.serial.write(frame)
         if written != len(frame):
             raise CIVError("partial CI-V write; do not retry automatically")
         stop_at = time.monotonic() + self.timeout_s
         while time.monotonic() < stop_at:
             for response in self.parser.feed(self.serial.read(128)):
-                if response.source != RADIO_ADDRESS or response.destination != CONTROLLER_ADDRESS:
+                if response.source != self.radio_address or response.destination != CONTROLLER_ADDRESS:
                     continue  # echo / broadcast / other equipment
                 if response.data == b"\xfa":
                     raise CIVError("IC-7300 returned NG (FA)")
                 if response.data.startswith(response_prefix):
                     return response.data[len(response_prefix):]
         raise CIVError("CI-V response timeout (no automatic retry)")
+
+    def read_transceiver_id(self) -> int:
+        """Read-only CI-V command 19 00. A one-byte reply is required."""
+        data = self._transaction(b"\x19\x00", b"\x19\x00")
+        if len(data) != 1:
+            raise CIVError("invalid CI-V transceiver identification reply")
+        return data[0]
 
     def read_frequency_hz(self) -> int:
         return decode_frequency_bcd(self._transaction(b"\x03", b"\x03"))

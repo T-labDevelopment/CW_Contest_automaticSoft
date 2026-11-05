@@ -107,3 +107,40 @@ class DesktopGuiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class RadioModelUiTests(unittest.TestCase):
+    def setUp(self):
+        try:
+            self.root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest(f"no graphical display: {exc}")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.addCleanup(lambda: self.root.destroy() if self.root.winfo_exists() else None)
+        self.app = DesktopApp(self.root, DesktopStorage(Path(self.tmp.name)))
+        self.root.update()
+
+    def test_bluetooth_button_disabled_for_ic7300_enabled_for_ic705(self):
+        self.assertEqual(str(self.app.bt_button.cget("state")), "disabled")
+        self.app.radio_model_var.set("IC-705")
+        self.app._on_radio_model_change()
+        self.assertEqual(str(self.app.bt_button.cget("state")), "normal")
+        self.app.civ_transport_var.set("Bluetooth")
+        self.app.radio_model_var.set("IC-9700")
+        self.app._on_radio_model_change()
+        self.assertEqual(str(self.app.bt_button.cget("state")), "disabled")
+        self.assertEqual(self.app.civ_transport_var.get(), "USB")
+
+    def test_identification_handshake_does_not_clear_state_on_recognition(self):
+        from cwcontest.radio_monitor import RadioUpdate
+        from cwcontest.contest_radio import classify_radio
+        self.app.radio_events.put(RadioUpdate(None, identified_model="IC-7300", detected_id=0x94))
+        self.app._poll_radio_events()
+        self.assertEqual(self.app.verified_radio_model, "IC-7300")
+        self.app.radio_events.put(RadioUpdate(classify_radio(7_025_000, "CW"),
+                                              identified_model="IC-7300", detected_id=0x94))
+        self.app._poll_radio_events()
+        self.assertIn("7.025", self.app.radio_var.get())
+        self.app.radio_events.put(RadioUpdate(None, error="CI-V停止: ID mismatch"))
+        self.app._poll_radio_events()
+        self.assertIsNone(self.app.verified_radio_model)
