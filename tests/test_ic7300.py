@@ -15,7 +15,9 @@ class FakeSerial:
     def write(self, data):
         self.writes.append(data)
         payload = data[4:-1]
-        if payload == b'\x03':
+        if payload == b'\x19\x00':
+            response = b'\x19\x00\x94'
+        elif payload == b'\x03':
             response = b'\x03\x00\x00\x10\x07\x00'  # 7,100,000 Hz
         elif payload == b'\x04':
             response = bytes((4, self.mode, 1))

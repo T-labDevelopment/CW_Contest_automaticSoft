@@ -15,6 +15,10 @@ class MockRadio:
     def __exit__(self, *args):
         return False
 
+    def read_transceiver_id(self):
+        self.calls.append("19 00")
+        return 0x94
+
     def read_frequency_hz(self):
         self.calls.append("03")
         return 7_025_000
@@ -31,12 +35,13 @@ class MonitorTests(unittest.TestCase):
         monitor = RadioMonitor("COM7", events, poll_seconds=0.5)
         with patch("cwcontest.radio_monitor.IC7300.open_port", return_value=fake):
             monitor.start()
+            handshake = events.get(timeout=2.0)
             result = events.get(timeout=2.0)
             monitor.stop()
             monitor.thread.join(timeout=2.0)
         self.assertEqual(result.state.band, "7")
         self.assertEqual(result.state.mode, "CW")
-        self.assertEqual(fake.calls, ["03", "04"])
+        self.assertEqual(fake.calls, ["19 00", "03", "04"])
         self.assertFalse(monitor.thread.is_alive())
 
     def test_read_failure_drops_valid_state(self):
@@ -48,6 +53,7 @@ class MonitorTests(unittest.TestCase):
         monitor = RadioMonitor("COM7", events)
         with patch("cwcontest.radio_monitor.IC7300.open_port", return_value=BadRadio()):
             monitor.start()
+            handshake = events.get(timeout=2.0)
             update = events.get(timeout=2.0)
             monitor.thread.join(timeout=2.0)
         self.assertIsNone(update.state)
@@ -55,3 +61,24 @@ class MonitorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class IdentificationGateTests(unittest.TestCase):
+    def test_wrong_id_never_polls_frequency(self):
+        class WrongModel(MockRadio):
+            def read_transceiver_id(self):
+                self.calls.append("19 00")
+                return 0xA4
+        wire = WrongModel()
+        events = Queue()
+        monitor = RadioMonitor("COM7", events, model="IC-7300", poll_seconds=0.5)
+        with patch("cwcontest.radio_monitor.IC7300.open_port", return_value=wire):
+            monitor.start()
+            result = events.get(timeout=2)
+            monitor.thread.join(timeout=2)
+        self.assertIsNone(result.state)
+        self.assertIn("ID不一致", result.error)
+        self.assertEqual(wire.calls, ["19 00"])
+
+    def test_bluetooth_forbidden_before_port_open(self):
+        with self.assertRaises(ValueError):
+            RadioMonitor("COM7", Queue(), model="IC-7300", transport="Bluetooth")

@@ -1,12 +1,14 @@
-# JARL CW AutoContest Rev.A / v0.6.0 (IC-7300 / Windows USB受信・CI-V・ログ)
+# JARL CW AutoContest Rev.A / v0.7.0 (ICOM USB/BT CI-V識別・Windows USB受信・ログ)
 
-**IC-7300（初代）を第一基準機としたWindows PC完結型のCWコンテスト交信試作**。
+**IC-7300（初代）を第一基準機として維持し、ICOM USB/BT(SPP) CI-V対応機種の読取を追加したWindows CWコンテスト交信試作**。
 
 現在の達成範囲：
 - IC-7300 CI-Vのフレーム構築と模擬応答付き読取（周波数、CWモード、BK-IN、TX状態）、最大30文字のCWメッセージ送信コマンド、FFh中止コマンド。
 - USB Audio入力をPCM WAVに録音する機能（実機未検証）。単一局のCW音をWAVから復号する実験的デコーダー。
 - オペレーター承認付きのQSO状態機械（送受信のソフトウェア結線なし、手順のユニットテストのみ）。
 - 既存のALL JA/全市全郡ログ集計、JARL R2.1ドラフト、Excel確認用CSV。**既存コアは維持**。
+
+**v0.7.0追加：** 接続設定にICOM機種選択、機種対応のUSB/Bluetooth SPPラジオボタン、CI-Vアドレス変更時の入力欄、手動「無線機確認」ボタンを実装。CI-V `19 00`のID応答が選択機種と一致するまで`03`/`04`を実行しない。機種表は[`docs/ICOM_MODELS_CIV_IDENTIFICATION_2026-11-05.md`](docs/ICOM_MODELS_CIV_IDENTIFICATION_2026-11-05.md)。Wi-Fiによる無線機接続・PCネットワーク変更は実装しない。CW送信禁止を維持。Bluetooth音声や全機種での17h送信は未検証。
 
 **v0.6.0追加：** Windows GUIにUSB Audio入力の録音デバイス選択、CW音程設定、8秒窓/4秒周期の単一音程ライブ復号、WAVファイル試験、受信候補局一覧（別ウィンドウ内）を実装。候補局は運用周波数・CWモード・交信済み局リストと照合して表示。候補局のダブルクリックで手動ログ入力へ転記する。DeepCW・自動交信・自動ログ確定・自動RF送信は**未実装**であり、受信内容はオペレーターが確認する。Windows EXEビルド用のGitHub Actionsワークフローを追加。詳細は [`docs/WINDOWS_BUILD_v0.6.0.md`](docs/WINDOWS_BUILD_v0.6.0.md)。
 

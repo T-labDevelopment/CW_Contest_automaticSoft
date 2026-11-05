@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jarl-cw-autocontest"
-version = "0.6.0"
-description = "IC-7300-first JARL CW contest experiment with fail-closed controls"
+version = "0.7.0"
+description = "ICOM USB/BT CI-V JARL CW contest experiment with fail-closed controls"
 requires-python = ">=3.11"
 dependencies = []
 

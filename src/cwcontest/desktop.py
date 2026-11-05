@@ -14,6 +14,7 @@ from .core import ALLOWED_BANDS, JST, LogValidationError, QSO
 from .desktop_data import DesktopSettings, DesktopStorage, summarize_live_log
 from .contest_radio import RadioState
 from .radio_monitor import RadioMonitor, RadioUpdate
+from .icom_models import MODELS, BY_NAME
 from .receive_monitor import AudioDecodeMonitor, CandidateTracker, ReceiveUpdate, decode_file
 from .candidate_selection import evaluate_candidates
 
@@ -48,6 +49,11 @@ class DesktopApp:
         self.radio_var = tk.StringVar(value="CI-V未接続（受信状態不明）")
         self.worked_var = tk.StringVar(value="交信済み局判定: コンテスト期間未設定")
         self.civ_var = tk.StringVar()
+        self.radio_model_var = tk.StringVar(value="IC-7300")
+        self.civ_transport_var = tk.StringVar(value="USB")
+        self.address_override_var = tk.StringVar()
+        self.radio_ident_var = tk.StringVar(value="無線機未確認（送信禁止）")
+        self.verified_radio_model: str | None = None
         self.start_var = tk.StringVar()
         self.end_var = tk.StringVar()
         self.call_var = tk.StringVar()
@@ -71,20 +77,24 @@ class DesktopApp:
                 self.start_var.set(loaded.contest_start_jst)
                 self.end_var.set(loaded.contest_end_jst)
                 self.civ_var.set(loaded.civ_port)
+                self.radio_model_var.set(loaded.radio_model)
+                self.civ_transport_var.set(loaded.civ_transport)
+                self.address_override_var.set(loaded.civ_address_override)
                 self.audio_tone_var.set(str(loaded.cw_tone_hz))
                 self.audio_device_var.set(str(loaded.audio_device) if loaded.audio_device >= 0 else "")
         except LogValidationError as exc:
             messagebox.showwarning("設定読み込み", str(exc), parent=self.root)
         self._refresh_band_choices()
+        self._update_transport_buttons()
         self.open_log_window()
         self.root.after(1000, self._poll_log)
         self.root.after(200, self._poll_radio_events)
         self.root.after(300, self._poll_rx_events)
 
     def _configure_root(self):
-        self.root.title("IC-7300 CWコンテスト - 設定")
-        self.root.geometry("630x790+60+70")
-        self.root.minsize(560, 710)
+        self.root.title("ICOM CWコンテスト - 設定")
+        self.root.geometry("680x875+60+70")
+        self.root.minsize(610, 795)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         try:
             ttk.Style(self.root).theme_use("vista" if os.name == "nt" else "clam")
@@ -94,7 +104,7 @@ class DesktopApp:
     def _create_settings_ui(self):
         wrapper = ttk.Frame(self.root, padding=16)
         wrapper.pack(fill="both", expand=True)
-        ttk.Label(wrapper, text="IC-7300 / CWコンテスト", font=("Yu Gothic UI" if os.name == "nt" else "TkDefaultFont", 15, "bold")).pack(anchor="w")
+        ttk.Label(wrapper, text="ICOM / CWコンテスト", font=("Yu Gothic UI" if os.name == "nt" else "TkDefaultFont", 15, "bold")).pack(anchor="w")
         ttk.Label(wrapper, text="自局設定（設定値は次回起動時も保持）").pack(anchor="w", pady=(3, 10))
         form = ttk.LabelFrame(wrapper, text="送信局・コンテスト情報", padding=12)
         form.pack(fill="x")
@@ -113,15 +123,35 @@ class DesktopApp:
         ttk.Entry(form, textvariable=self.end_var).grid(row=5, column=1, sticky="ew", pady=6)
         ttk.Label(form, text="日時例：2026-04-25 21:00（空欄では自動除外を行いません）", foreground="#505c6b").grid(row=6, column=0, columnspan=2, sticky="w", pady=(5, 0))
         ttk.Label(form, text="送信NR例：ALL JA=11M / 全市全郡=100116M（RST不要）", foreground="#505c6b").grid(row=7, column=0, columnspan=2, sticky="w", pady=(3, 0))
-        radio_frame = ttk.LabelFrame(wrapper, text="IC-7300 / USB CI-V 受信専用", padding=9)
+        radio_frame = ttk.LabelFrame(wrapper, text="ICOM CI-V 接続（無線機確認は19 00 / 送信禁止）", padding=9)
         radio_frame.pack(fill="x", pady=(12, 0))
+        model_line = ttk.Frame(radio_frame)
+        model_line.pack(fill="x")
+        ttk.Label(model_line, text="想定無線機").pack(side="left", padx=(0, 8))
+        self.radio_model_box = ttk.Combobox(model_line, textvariable=self.radio_model_var,
+                                            state="readonly", width=22,
+                                            values=[x.name for x in MODELS])
+        self.radio_model_box.pack(side="left")
+        self.radio_model_box.bind("<<ComboboxSelected>>", self._on_radio_model_change)
+        ttk.Label(model_line, text="アドレス変更時").pack(side="left", padx=(12, 5))
+        ttk.Entry(model_line, textvariable=self.address_override_var, width=5).pack(side="left")
+        transport_line = ttk.Frame(radio_frame)
+        transport_line.pack(fill="x", pady=(6, 0))
+        ttk.Label(transport_line, text="接続方式").pack(side="left", padx=(0, 8))
+        ttk.Radiobutton(transport_line, text="USB", variable=self.civ_transport_var,
+                        value="USB").pack(side="left")
+        self.bt_button = ttk.Radiobutton(transport_line, text="Bluetooth SPP", variable=self.civ_transport_var,
+                                         value="Bluetooth")
+        self.bt_button.pack(side="left", padx=(14, 0))
+        ttk.Label(transport_line, text="Wi-Fiは標準対象外", foreground="#505c6b").pack(side="left", padx=(15, 0))
         line = ttk.Frame(radio_frame)
-        line.pack(fill="x")
+        line.pack(fill="x", pady=(7, 0))
         ttk.Label(line, text="COMポート").pack(side="left", padx=(0, 7))
-        ttk.Entry(line, textvariable=self.civ_var, width=10).pack(side="left", padx=(0, 9))
-        ttk.Button(line, text="接続・読取", command=self._connect_radio).pack(side="left")
+        ttk.Entry(line, textvariable=self.civ_var, width=11).pack(side="left", padx=(0, 9))
+        ttk.Button(line, text="無線機確認", command=self._connect_radio).pack(side="left")
         ttk.Button(line, text="切断", command=self._disconnect_radio).pack(side="left", padx=(8, 0))
-        ttk.Label(radio_frame, textvariable=self.radio_var).pack(anchor="w", pady=(7, 3))
+        ttk.Label(radio_frame, textvariable=self.radio_ident_var).pack(anchor="w", pady=(7, 2))
+        ttk.Label(radio_frame, textvariable=self.radio_var).pack(anchor="w", pady=(2, 3))
         ttk.Label(radio_frame, textvariable=self.worked_var).pack(anchor="w")
         audio = ttk.LabelFrame(wrapper, text="USB Audio / CW受信モニタ（実験版・受信専用）", padding=9)
         audio.pack(fill="x", pady=(12, 0))
@@ -146,6 +176,20 @@ class DesktopApp:
         ttk.Button(buttons, text="交信ログを表示", command=self.open_log_window).pack(side="left")
         ttk.Label(wrapper, textvariable=self.notice_var, foreground="#8a4b00", wraplength=520).pack(anchor="w", pady=(12, 3))
         ttk.Label(wrapper, text="本GUIは受信・候補提示・手動ログ登録まで。自動送信とDeepCW接続は未実装。", foreground="#505c6b").pack(anchor="w")
+
+    def _update_transport_buttons(self):
+        model = BY_NAME.get(self.radio_model_var.get())
+        supports_bt = bool(model and model.bluetooth_spp_civ)
+        if not supports_bt:
+            self.civ_transport_var.set("USB")
+        self.bt_button.configure(state="normal" if supports_bt else "disabled")
+
+    def _on_radio_model_change(self, _event=None):
+        self._disconnect_radio()
+        self._update_transport_buttons()
+        profile = BY_NAME.get(self.radio_model_var.get())
+        self.radio_ident_var.set(f"{profile.name if profile else '不明'}：未確認（識別コードを取得してください）")
+        self.notice_var.set("機種変更：設定を保存後、無線機確認でCI-V 19 00を実行してください。")
 
     def _audio_device_id(self) -> int:
         value = self.audio_device_var.get().strip()
@@ -278,7 +322,9 @@ class DesktopApp:
         return DesktopSettings(self.call_var.get(), contest_id, self.nr_var.get(),
                                self.band_var.get(), self.start_var.get(),
                                self.end_var.get(), self.civ_var.get(),
-                               self._audio_device_id(), int(self.audio_tone_var.get())).checked()
+                               self._audio_device_id(), int(self.audio_tone_var.get()),
+                               self.radio_model_var.get(), self.civ_transport_var.get(),
+                               self.address_override_var.get()).checked()
 
     def _on_save(self):
         try:
@@ -293,6 +339,10 @@ class DesktopApp:
         self.start_var.set(value.contest_start_jst)
         self.end_var.set(value.contest_end_jst)
         self.civ_var.set(value.civ_port)
+        self.radio_model_var.set(value.radio_model)
+        self.civ_transport_var.set(value.civ_transport)
+        self.address_override_var.set(value.civ_address_override)
+        self._update_transport_buttons()
         self.audio_tone_var.set(str(value.cw_tone_hz))
         self._update_worked_status()
         self.notice_var.set(f"設定保存済み: {value.station_callsign} / {value.sent_nr} ・送信禁止")
@@ -316,7 +366,11 @@ class DesktopApp:
             return
         self._disconnect_radio()
         self.radio_events = Queue()  # old worker events cannot revive stale state
-        self.radio_monitor = RadioMonitor(settings.civ_port, self.radio_events)
+        self.radio_monitor = RadioMonitor(settings.civ_port, self.radio_events,
+                                          model=settings.radio_model,
+                                          transport=settings.civ_transport,
+                                          address_override=settings.civ_address_override)
+        self.radio_ident_var.set("19 00 無線機識別を実行中…")
         self.radio_var.set(f"{settings.civ_port} 接続確認中…（送信禁止）")
         self.radio_monitor.start()
 
@@ -325,6 +379,8 @@ class DesktopApp:
             self.radio_monitor.stop()
             self.radio_monitor = None
         self.radio_state = None
+        self.verified_radio_model = None
+        self.radio_ident_var.set("無線機未確認（送信禁止）")
         self.selected_station = None
         self.candidate_tracker.clear()
         if self.rx_monitor is not None:
@@ -340,6 +396,11 @@ class DesktopApp:
             while True:
                 update = self.radio_events.get_nowait()
                 previous = self.radio_state
+                if update.identified_model and update.detected_id is not None:
+                    self.verified_radio_model = update.identified_model
+                    self.radio_ident_var.set(f"確認済み: {update.identified_model} / ID {update.detected_id:02X}h / {self.civ_transport_var.get()}")
+                if update.state is None and not update.error and update.identified_model:
+                    continue  # recognition handshake, no frequency yet
                 self.radio_state = update.state
                 if update.state is not None:
                     state = update.state
@@ -355,9 +416,11 @@ class DesktopApp:
                         warning = "帯域境界付近・要確認"
                     if not state.cw_mode:
                         warning = "CW以外・対象外"
-                    self.radio_var.set(f"IC-7300 {state.frequency_label}  {state.mode}  "
+                    self.radio_var.set(f"{self.verified_radio_model or 'ICOM'} {state.frequency_label}  {state.mode}  "
                                        f"{state.band or '帯域不明'}MHz / {warning}")
                 else:
+                    self.verified_radio_model = None
+                    self.radio_ident_var.set("無線機確認失敗・切断（送信禁止）")
                     self.selected_station = None
                     self.candidate_tracker.clear()
                     if self.rx_monitor is not None:
@@ -368,7 +431,6 @@ class DesktopApp:
         except Empty:
             pass
         self.root.after(200, self._poll_radio_events)
-        self.root.after(300, self._poll_rx_events)
 
     def _update_worked_status(self):
         if self.settings is None:
@@ -398,7 +460,7 @@ class DesktopApp:
             return
         window = tk.Toplevel(self.root)
         self.log_window = window
-        window.title("交信ログ（自動更新） - IC-7300 CW")
+        window.title("交信ログ（自動更新） - ICOM CW")
         window.geometry("1050x620+675+70")
         window.minsize(750, 470)
         window.protocol("WM_DELETE_WINDOW", self._close_log_window)

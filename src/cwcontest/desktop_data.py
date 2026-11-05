@@ -16,6 +16,7 @@ import threading
 from typing import Optional
 
 from .contest_store import ContestLedger, StoredQSO
+from .icom_models import BY_NAME, validate_transport, parse_address_override
 
 from .core import (
     ALLOWED_BANDS, CALL_RE, CSV_FIELDS, JST, LogValidationError, QSO,
@@ -34,6 +35,9 @@ class DesktopSettings:
     civ_port: str = ""
     audio_device: int = -1
     cw_tone_hz: int = 700
+    radio_model: str = "IC-7300"
+    civ_transport: str = "USB"
+    civ_address_override: str = ""
 
     def checked(self) -> "DesktopSettings":
         call = self.station_callsign.strip().upper()
@@ -61,12 +65,20 @@ class DesktopSettings:
         port = self.civ_port.strip().upper()
         if port and not re.fullmatch(r"COM[1-9][0-9]*", port):
             raise LogValidationError("CI-Vポート名は COM4 のように入力してください。")
+        if self.radio_model not in BY_NAME:
+            raise LogValidationError("未対応のICOM機種です。")
+        try:
+            validate_transport(BY_NAME[self.radio_model], self.civ_transport)
+            parse_address_override(self.civ_address_override, BY_NAME[self.radio_model])
+        except ValueError as exc:
+            raise LogValidationError(str(exc)) from exc
         if not isinstance(self.audio_device, int) or not -1 <= self.audio_device <= 999:
             raise LogValidationError("USB Audioデバイス番号が不正です。")
         if not isinstance(self.cw_tone_hz, int) or not 400 <= self.cw_tone_hz <= 1100:
             raise LogValidationError("CWトーンは400～1100Hzで指定してください。")
         return DesktopSettings(call, contest, nr, band, start, end, port,
-                               self.audio_device, self.cw_tone_hz)
+                               self.audio_device, self.cw_tone_hz, self.radio_model,
+                               self.civ_transport, self.civ_address_override.strip().upper())
 
     @property
     def contest_window(self) -> tuple[datetime, datetime] | None:
@@ -111,7 +123,8 @@ class DesktopStorage:
         except (ValueError, OSError) as exc:
             raise LogValidationError(f"設定ファイルが読み込めません: {exc}") from exc
         mandatory = {"station_callsign", "contest_id", "sent_nr", "band"}
-        accepted = mandatory | {"contest_start_jst", "contest_end_jst", "civ_port", "audio_device", "cw_tone_hz"}
+        accepted = mandatory | {"contest_start_jst", "contest_end_jst", "civ_port", "audio_device", "cw_tone_hz",
+                                "radio_model", "civ_transport", "civ_address_override"}
         if not isinstance(raw, dict) or not mandatory.issubset(raw) or not set(raw).issubset(accepted):
             raise LogValidationError("設定ファイルの項目が不正です。")
         return DesktopSettings(**raw).checked()
