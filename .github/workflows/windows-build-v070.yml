@@ -1,0 +1,48 @@
+name: Windows ICOM CW AutoContest v0.7.0
+
+on:
+  push:
+    branches: ["work/icom-identification-v0.7.0"]
+  pull_request:
+    branches: ["work/ic705-bluetooth-evaluation"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: 'x64'
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check -e '.[radio,audio]'
+      - name: Run tests on Windows
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -v
+      - name: Build standalone EXE
+        shell: pwsh
+        run: |
+          ./scripts/build_windows.ps1
+      - name: Verify packaged runtime without RF device
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'cw-selfcheck.json'
+          $p = Start-Process -FilePath '.\dist\IC7300_CW_AutoContest.exe' -ArgumentList @('--self-check-out', $output) -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or !(Test-Path $output)) { throw 'Packaged runtime check failed' }
+          $result = Get-Content -Raw $output | ConvertFrom-Json
+          if ($result.transmitter_enabled -ne $false -or $result.cw_decoder_available -ne $true) { throw 'Unsafe or incomplete runtime' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ICOM_CW_AutoContest_v0.7.0_Windows_x64
+          path: dist/IC7300_CW_AutoContest.exe
+          if-no-files-found: error
+          retention-days: 30
