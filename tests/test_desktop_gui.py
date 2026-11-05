@@ -74,6 +74,30 @@ class DesktopGuiTests(unittest.TestCase):
         self.assertIsNone(self.app.radio_state)
         self.assertIn("通信切断", self.app.radio_var.get())
 
+    def test_receive_candidate_shows_in_separate_log_and_can_copy(self):
+        from cwcontest.receive_monitor import ReceiveUpdate
+        self.app.call_var.set("JA1AAA")
+        self.app.nr_var.set("11M")
+        self.app._on_save()
+        self.app.rx_events.put(ReceiveUpdate("CQ JA2BBB 599", 22.0, origin="WAV"))
+        self.app._poll_rx_events()
+        self.assertEqual(len(self.app.candidate_tree.get_children()), 1)
+        row = self.app.candidate_tree.get_children()[0]
+        self.app.candidate_tree.selection_set(row)
+        self.app._choose_candidate()
+        self.assertEqual(self.app.other_call_var.get(), "JA2BBB")
+        self.assertEqual(len(self.app.tree.get_children()), 0)  # never auto-log
+
+    def test_band_switch_clears_receive_candidates(self):
+        from cwcontest.contest_radio import classify_radio
+        from cwcontest.radio_monitor import RadioUpdate
+        self.app.candidate_tracker.observe("JA2BBB")
+        self.app.radio_events.put(RadioUpdate(classify_radio(7_025_000, "CW")))
+        self.app._poll_radio_events()
+        self.app.radio_events.put(RadioUpdate(classify_radio(14_060_000, "CW")))
+        self.app._poll_radio_events()
+        self.assertEqual(self.app.candidate_tracker.candidates(), [])
+
     def test_close_reopen_log_still_refreshes(self):
         self.app._close_log_window()
         self.assertIsNone(self.app.log_window)

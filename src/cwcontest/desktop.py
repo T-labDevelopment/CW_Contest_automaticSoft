@@ -5,14 +5,17 @@ from datetime import datetime
 import os
 import sqlite3
 from queue import Empty, Queue
+from threading import Thread
 from pathlib import Path
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 from .core import ALLOWED_BANDS, JST, LogValidationError, QSO
 from .desktop_data import DesktopSettings, DesktopStorage, summarize_live_log
 from .contest_radio import RadioState
 from .radio_monitor import RadioMonitor, RadioUpdate
+from .receive_monitor import AudioDecodeMonitor, CandidateTracker, ReceiveUpdate, decode_file
+from .candidate_selection import evaluate_candidates
 
 CONTEST_LABELS = {"ALL_JA": "ALL JA", "ACAG": "全市全郡"}
 LABEL_TO_CONTEST = {v: k for k, v in CONTEST_LABELS.items()}
@@ -26,13 +29,22 @@ class DesktopApp:
         self.log_window: tk.Toplevel | None = None
         self.tree: ttk.Treeview | None = None
         self.log_summary_var = tk.StringVar(value="ログ待機中")
-        self.notice_var = tk.StringVar(value="送信禁止 / ライブ復号未接続。手動確定QSOのみ記録可能")
+        self.notice_var = tk.StringVar(value="送信禁止 / 単一トーン受信は実験版。QSOは手動確定のみ")
         self._log_stamp: tuple | None = None
         self._closing = False
         self.radio_state: RadioState | None = None
         self.radio_monitor: RadioMonitor | None = None
         self.radio_events: Queue[RadioUpdate] = Queue()
         self.selected_station: str | None = None  # stale candidates invalidated on band changes
+        self.candidate_tracker = CandidateTracker()
+        self.rx_monitor: AudioDecodeMonitor | None = None
+        self.rx_events: Queue[ReceiveUpdate] = Queue()
+        self.rx_var = tk.StringVar(value="USB CW受信停止中（送信禁止）")
+        self.rx_text_var = tk.StringVar(value="最後の復号: --")
+        self.audio_device_var = tk.StringVar(value="")
+        self.audio_tone_var = tk.StringVar(value="700")
+        self.candidate_tree: ttk.Treeview | None = None
+        self._audio_devices: dict[str, int] = {}
         self.radio_var = tk.StringVar(value="CI-V未接続（受信状態不明）")
         self.worked_var = tk.StringVar(value="交信済み局判定: コンテスト期間未設定")
         self.civ_var = tk.StringVar()
@@ -59,17 +71,20 @@ class DesktopApp:
                 self.start_var.set(loaded.contest_start_jst)
                 self.end_var.set(loaded.contest_end_jst)
                 self.civ_var.set(loaded.civ_port)
+                self.audio_tone_var.set(str(loaded.cw_tone_hz))
+                self.audio_device_var.set(str(loaded.audio_device) if loaded.audio_device >= 0 else "")
         except LogValidationError as exc:
             messagebox.showwarning("設定読み込み", str(exc), parent=self.root)
         self._refresh_band_choices()
         self.open_log_window()
         self.root.after(1000, self._poll_log)
         self.root.after(200, self._poll_radio_events)
+        self.root.after(300, self._poll_rx_events)
 
     def _configure_root(self):
         self.root.title("IC-7300 CWコンテスト - 設定")
-        self.root.geometry("580x620+60+70")
-        self.root.minsize(520, 580)
+        self.root.geometry("630x790+60+70")
+        self.root.minsize(560, 710)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         try:
             ttk.Style(self.root).theme_use("vista" if os.name == "nt" else "clam")
@@ -108,12 +123,148 @@ class DesktopApp:
         ttk.Button(line, text="切断", command=self._disconnect_radio).pack(side="left", padx=(8, 0))
         ttk.Label(radio_frame, textvariable=self.radio_var).pack(anchor="w", pady=(7, 3))
         ttk.Label(radio_frame, textvariable=self.worked_var).pack(anchor="w")
+        audio = ttk.LabelFrame(wrapper, text="USB Audio / CW受信モニタ（実験版・受信専用）", padding=9)
+        audio.pack(fill="x", pady=(12, 0))
+        audio_line = ttk.Frame(audio)
+        audio_line.pack(fill="x")
+        ttk.Label(audio_line, text="入力デバイス").pack(side="left")
+        self.audio_box = ttk.Combobox(audio_line, textvariable=self.audio_device_var, width=28)
+        self.audio_box.pack(side="left", fill="x", expand=True, padx=(5, 6))
+        ttk.Button(audio_line, text="一覧取得", command=self._refresh_audio_devices).pack(side="left")
+        tone_line = ttk.Frame(audio)
+        tone_line.pack(fill="x", pady=(7, 0))
+        ttk.Label(tone_line, text="CW音程(Hz)").pack(side="left")
+        ttk.Entry(tone_line, textvariable=self.audio_tone_var, width=7).pack(side="left", padx=(5, 12))
+        ttk.Button(tone_line, text="受信開始", command=self._start_rx).pack(side="left")
+        ttk.Button(tone_line, text="停止", command=self._stop_rx).pack(side="left", padx=(6, 0))
+        ttk.Button(tone_line, text="WAV試験", command=self._open_rx_wav).pack(side="left", padx=(6, 0))
+        ttk.Label(audio, textvariable=self.rx_var).pack(anchor="w", pady=(6, 0))
+        ttk.Label(audio, textvariable=self.rx_text_var, wraplength=560).pack(anchor="w", pady=(4, 0))
         buttons = ttk.Frame(wrapper)
         buttons.pack(fill="x", pady=(14, 8))
         ttk.Button(buttons, text="設定を保存", command=self._on_save).pack(side="left", padx=(0, 10))
         ttk.Button(buttons, text="交信ログを表示", command=self.open_log_window).pack(side="left")
         ttk.Label(wrapper, textvariable=self.notice_var, foreground="#8a4b00", wraplength=520).pack(anchor="w", pady=(12, 3))
-        ttk.Label(wrapper, text="この画面からは無線機へ送信しません。", foreground="#505c6b").pack(anchor="w")
+        ttk.Label(wrapper, text="本GUIは受信・候補提示・手動ログ登録まで。自動送信とDeepCW接続は未実装。", foreground="#505c6b").pack(anchor="w")
+
+    def _audio_device_id(self) -> int:
+        value = self.audio_device_var.get().strip()
+        if value in self._audio_devices:
+            return self._audio_devices[value]
+        if not value:
+            return -1
+        try:
+            return int(value.split(":", 1)[0])
+        except ValueError as exc:
+            raise LogValidationError("USB Audioデバイスを一覧から選択してください。") from exc
+
+    def _refresh_audio_devices(self):
+        try:
+            from .audio_usb import list_devices
+            devices = list_devices()
+        except Exception as exc:
+            messagebox.showerror("音声デバイス", str(exc), parent=self.root)
+            return
+        self._audio_devices = {f"{i}: {name}": i for i, name, _ in devices}
+        self.audio_box.configure(values=list(self._audio_devices))
+        selected = self._audio_device_id()
+        for name, number in self._audio_devices.items():
+            if selected == number:
+                self.audio_device_var.set(name)
+                break
+        self.rx_var.set(f"入力デバイス {len(devices)} 件（無線機のUSB Audioを選択）")
+
+    def _start_rx(self):
+        try:
+            device, tone = self._audio_device_id(), int(self.audio_tone_var.get())
+            if self.settings is None:
+                raise LogValidationError("先に自局設定を保存してください。")
+            if device != self.settings.audio_device or tone != self.settings.cw_tone_hz:
+                raise LogValidationError("選択した音声デバイスと音程を設定保存してから開始してください。")
+            receiver = AudioDecodeMonitor(device, tone, self.rx_events)
+        except (ValueError, LogValidationError) as exc:
+            messagebox.showerror("CW受信開始", str(exc), parent=self.root)
+            return
+        self._stop_rx()
+        self.rx_events = Queue()
+        receiver.events = self.rx_events
+        self.rx_monitor = receiver
+        self.rx_var.set("USB音声を受信中（8秒窓・4秒周期・送信なし）")
+        receiver.start()
+
+    def _stop_rx(self):
+        if self.rx_monitor is not None:
+            self.rx_monitor.stop()
+            self.rx_monitor = None
+        self.rx_var.set("USB CW受信停止中（送信禁止）")
+
+    def _open_rx_wav(self):
+        try:
+            tone = int(self.audio_tone_var.get())
+            if not 400 <= tone <= 1100:
+                raise ValueError("トーン周波数は400～1100Hzで指定してください。")
+        except ValueError as exc:
+            messagebox.showerror("WAV試験", str(exc), parent=self.root)
+            return
+        filename = filedialog.askopenfilename(parent=self.root, title="CW WAVを選択",
+                                              filetypes=[("WAV音声", "*.wav")])
+        if not filename:
+            return
+        self.rx_var.set(f"WAV復号中：{Path(filename).name}")
+        events = self.rx_events
+        def job():
+            try:
+                events.put(decode_file(filename, tone))
+            except Exception as exc:
+                events.put(ReceiveUpdate(error=f"WAV読取失敗: {exc}"))
+        Thread(target=job, daemon=True, name="CW-WAV-TEST").start()
+
+    def _poll_rx_events(self):
+        if self._closing:
+            return
+        try:
+            while True:
+                result = self.rx_events.get_nowait()
+                if result.error:
+                    self.rx_var.set(result.error)
+                    if "停止" in result.error or "オーバーフロー" in result.error:
+                        self.candidate_tracker.clear()
+                else:
+                    self.rx_text_var.set(f"{result.origin}復号: {result.text or '--'}  "
+                                         f"/ {result.wpm or '--'} WPM")
+                    self.candidate_tracker.observe(result.text)
+                    self.rx_var.set("受信候補を更新（オペレーター確認必須 / 送信禁止）")
+                self._refresh_candidates()
+        except Empty:
+            pass
+        self.root.after(300, self._poll_rx_events)
+
+    def _refresh_candidates(self):
+        tree = self.candidate_tree
+        if tree is None or not tree.winfo_exists():
+            return
+        for child in tree.get_children():
+            tree.delete(child)
+        for call, count in self.candidate_tracker.candidates():
+            if self.settings is None:
+                status = "自局設定未保存"
+            else:
+                try:
+                    status = evaluate_candidates(self.storage, self.settings, self.radio_state,
+                                                 [call])[0].reason
+                except Exception as exc:
+                    status = f"判定エラー: {exc}"
+            tree.insert("", "end", values=(call, count, status))
+
+    def _choose_candidate(self, _event=None):
+        if self.candidate_tree is None:
+            return
+        selection = self.candidate_tree.selection()
+        if selection:
+            values = self.candidate_tree.item(selection[0])["values"]
+            if values:
+                self.other_call_var.set(str(values[0]))
+                self.notice_var.set("復号候補を手動登録欄へ転記。交信成立・NRを確認してから登録してください。")
 
     def _refresh_band_choices(self):
         contest_id = LABEL_TO_CONTEST.get(self.contest_var.get(), "ALL_JA")
@@ -126,12 +277,13 @@ class DesktopApp:
         contest_id = LABEL_TO_CONTEST.get(self.contest_var.get(), "")
         return DesktopSettings(self.call_var.get(), contest_id, self.nr_var.get(),
                                self.band_var.get(), self.start_var.get(),
-                               self.end_var.get(), self.civ_var.get()).checked()
+                               self.end_var.get(), self.civ_var.get(),
+                               self._audio_device_id(), int(self.audio_tone_var.get())).checked()
 
     def _on_save(self):
         try:
             value = self.storage.save_settings(self._read_form())
-        except (OSError, LogValidationError, TypeError) as exc:
+        except (OSError, LogValidationError, TypeError, ValueError) as exc:
             messagebox.showerror("設定エラー", str(exc), parent=self.root)
             return
         previous = self.settings
@@ -141,9 +293,13 @@ class DesktopApp:
         self.start_var.set(value.contest_start_jst)
         self.end_var.set(value.contest_end_jst)
         self.civ_var.set(value.civ_port)
+        self.audio_tone_var.set(str(value.cw_tone_hz))
         self._update_worked_status()
         self.notice_var.set(f"設定保存済み: {value.station_callsign} / {value.sent_nr} ・送信禁止")
         if previous != value:
+            self._stop_rx()
+            self.candidate_tracker.clear()
+            self._refresh_candidates()
             self._disconnect_radio()  # invalidate the old profile/port context
             self._log_stamp = None
             self._refresh_log(force=True)
@@ -170,6 +326,10 @@ class DesktopApp:
             self.radio_monitor = None
         self.radio_state = None
         self.selected_station = None
+        self.candidate_tracker.clear()
+        if self.rx_monitor is not None:
+            self.rx_monitor.invalidate()
+        self._refresh_candidates()
         self.radio_var.set("CI-V未接続（受信状態不明 / 自動送信禁止）")
         self._update_worked_status()
 
@@ -185,6 +345,10 @@ class DesktopApp:
                     state = update.state
                     if previous and (previous.frequency_hz != state.frequency_hz or previous.mode != state.mode):
                         self.selected_station = None
+                        self.candidate_tracker.clear()
+                        if self.rx_monitor is not None:
+                            self.rx_monitor.invalidate()
+                        self._refresh_candidates()
                         self.notice_var.set("周波数またはモード変更：旧受信候補を破棄しました（送信禁止）")
                     warning = "CWコンテスト帯域内" if state.in_cw_contest_segment else "CWコンテスト帯域外"
                     if state.edge_warning:
@@ -195,11 +359,16 @@ class DesktopApp:
                                        f"{state.band or '帯域不明'}MHz / {warning}")
                 else:
                     self.selected_station = None
+                    self.candidate_tracker.clear()
+                    if self.rx_monitor is not None:
+                        self.rx_monitor.invalidate()
+                    self._refresh_candidates()
                     self.radio_var.set(update.error or "CI-V取得失敗（自動送信禁止）")
                 self._update_worked_status()
         except Empty:
             pass
         self.root.after(200, self._poll_radio_events)
+        self.root.after(300, self._poll_rx_events)
 
     def _update_worked_status(self):
         if self.settings is None:
@@ -230,8 +399,8 @@ class DesktopApp:
         window = tk.Toplevel(self.root)
         self.log_window = window
         window.title("交信ログ（自動更新） - IC-7300 CW")
-        window.geometry("1050x500+675+70")
-        window.minsize(750, 340)
+        window.geometry("1050x620+675+70")
+        window.minsize(750, 470)
         window.protocol("WM_DELETE_WINDOW", self._close_log_window)
         outer = ttk.Frame(window, padding=12)
         outer.pack(fill="both", expand=True)
@@ -259,7 +428,18 @@ class DesktopApp:
         sx.grid(row=1, column=0, sticky="ew")
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
-        manual = ttk.LabelFrame(outer, text="交信成立を確認したQSOを手動登録（受信・送信の自動処理は未接続）", padding=9)
+        candidates = ttk.LabelFrame(outer, text="CW受信候補（候補をダブルクリック→手動登録欄へ転記、QSO自動成立ではありません）", padding=7)
+        candidates.pack(fill="x", pady=(8, 0))
+        self.candidate_tree = ttk.Treeview(candidates, columns=("call", "count", "status"),
+                                           show="headings", height=3)
+        for key, title, width in (("call", "候補局", 150), ("count", "検出回数", 80),
+                                  ("status", "選択判定", 500)):
+            self.candidate_tree.heading(key, text=title)
+            self.candidate_tree.column(key, width=width, stretch=key=="status")
+        self.candidate_tree.pack(fill="x")
+        self.candidate_tree.bind("<Double-1>", self._choose_candidate)
+        self._refresh_candidates()
+        manual = ttk.LabelFrame(outer, text="交信成立を確認したQSOを手動登録（受信内容からの自動確定は行いません）", padding=9)
         manual.pack(fill="x", pady=(10, 0))
         ttk.Label(manual, text="相手局").pack(side="left")
         ttk.Entry(manual, textvariable=self.other_call_var, width=14).pack(side="left", padx=(4, 12))
@@ -280,6 +460,7 @@ class DesktopApp:
             self.log_window.destroy()
         self.log_window = None
         self.tree = None
+        self.candidate_tree = None
 
     def _refresh_log(self, *, force: bool = False):
         if self.log_window is None or not self.log_window.winfo_exists() or self.tree is None:
@@ -374,6 +555,7 @@ class DesktopApp:
     def _on_close(self):
         self._closing = True
         self._disconnect_radio()
+        self._stop_rx()
         self._close_log_window()
         self.root.destroy()
 

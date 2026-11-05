@@ -32,6 +32,8 @@ class DesktopSettings:
     contest_start_jst: str = ""  # YYYY-MM-DD HH:MM, JST
     contest_end_jst: str = ""
     civ_port: str = ""
+    audio_device: int = -1
+    cw_tone_hz: int = 700
 
     def checked(self) -> "DesktopSettings":
         call = self.station_callsign.strip().upper()
@@ -59,7 +61,12 @@ class DesktopSettings:
         port = self.civ_port.strip().upper()
         if port and not re.fullmatch(r"COM[1-9][0-9]*", port):
             raise LogValidationError("CI-Vポート名は COM4 のように入力してください。")
-        return DesktopSettings(call, contest, nr, band, start, end, port)
+        if not isinstance(self.audio_device, int) or not -1 <= self.audio_device <= 999:
+            raise LogValidationError("USB Audioデバイス番号が不正です。")
+        if not isinstance(self.cw_tone_hz, int) or not 400 <= self.cw_tone_hz <= 1100:
+            raise LogValidationError("CWトーンは400～1100Hzで指定してください。")
+        return DesktopSettings(call, contest, nr, band, start, end, port,
+                               self.audio_device, self.cw_tone_hz)
 
     @property
     def contest_window(self) -> tuple[datetime, datetime] | None:
@@ -104,7 +111,7 @@ class DesktopStorage:
         except (ValueError, OSError) as exc:
             raise LogValidationError(f"設定ファイルが読み込めません: {exc}") from exc
         mandatory = {"station_callsign", "contest_id", "sent_nr", "band"}
-        accepted = mandatory | {"contest_start_jst", "contest_end_jst", "civ_port"}
+        accepted = mandatory | {"contest_start_jst", "contest_end_jst", "civ_port", "audio_device", "cw_tone_hz"}
         if not isinstance(raw, dict) or not mandatory.issubset(raw) or not set(raw).issubset(accepted):
             raise LogValidationError("設定ファイルの項目が不正です。")
         return DesktopSettings(**raw).checked()
