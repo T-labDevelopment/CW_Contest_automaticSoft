@@ -1,4 +1,4 @@
-# JARL CW AutoContest Rev.A / v0.3.0 (IC-7300基準)
+# JARL CW AutoContest Rev.A / v0.3.1 (IC-7300基準)
 
 **IC-7300（初代）を第一基準機としたWindows PC完結型のCWコンテスト交信試作**。
 
@@ -7,6 +7,8 @@
 - USB Audio入力をPCM WAVに録音する機能（実機未検証）。単一局のCW音をWAVから復号する実験的デコーダー。
 - オペレーター承認付きのQSO状態機械（送受信のソフトウェア結線なし、手順のユニットテストのみ）。
 - 既存のALL JA/全市全郡ログ集計、JARL R2.1ドラフト、Excel確認用CSV。**既存コアは維持**。
+
+**v0.3.1仕様追補（実行コードは0.3.0のまま）**：パイルアップでは全局の同時受信・復号を必須とせず、交信可能な1局の選択・追跡・再送要求を優先。DeepCW公開エンジンを第一評価候補とする。現段階では仕様のみで、実装・実機検証は未実施。詳細は[`docs/PILEUP_SELECTION_DESIGN.md`](docs/PILEUP_SELECTION_DESIGN.md)。
 
 **未実装**：USB AudioのライブCW自動解読と連動交信、多数局・QRM・QSBの復号、完成QSOの自動ログ追記、zLogへのライブ同期、JARL提出サイトへの自動提出、実機USB接続とRF送出実証。JARLで自律ロボット局が参加可能かどうかも未確認。送信機能はデフォルト無効。
 
@@ -45,6 +47,7 @@ PYTHONPATH=src python -m cwcontest export --config examples/allja2026_demo.json 
 - [`SPEC.md`](SPEC.md) – 全体仕様（既存のv0.2.0基本方針を維持し、v0.3.0追補あり）
 - [`docs/USB_IO_DESIGN.md`](docs/USB_IO_DESIGN.md) – 初期USB分離設計
 - [`docs/IC7300_INTEGRATION.md`](docs/IC7300_INTEGRATION.md) – IC-7300具体的な接続・安全・コマンド仕様
+- [`docs/PILEUP_SELECTION_DESIGN.md`](docs/PILEUP_SELECTION_DESIGN.md) – DeepCW調査、1局選択型パイルアップ処理・検証項目
 - [`profiles/ic7300_usb.json`](profiles/ic7300_usb.json) – 実行用の送信禁止プロファイル
 - [`profiles/ic7300_usb_draft.json`](profiles/ic7300_usb_draft.json) – v0.2.0以前の資料（削除せず保持）
 
