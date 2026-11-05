@@ -1,10 +1,18 @@
-# JARL CW AutoContest Rev.A / 0.1.0
+# JARL CW AutoContest Rev.A / 0.2.0（設計仕様改訂）
 
 JARL国内コンテスト向け自動CW交信装置の開発リポジトリです。
 
 **現段階で動作するのは、オフラインCSV入力からのログ検査、重複判定、得点・マルチ集計、JARL R2.1形式（ドラフト）およびExcelレビュー用CSVの出力だけです。**
-CWの受信解読、キーイング、CAT、zLogのライブ連携、実RF送信、自動QSO、提出サイトへの送信は未実装です。
+CWの受信解読、USB音声取得、CI-V／DTR/RTS／外付けUSB KEYによるキーイング、zLogのライブ連携、実RF送信、自動QSO、提出サイトへの送信は未実装です。
 JARLによるファイル受理確認、法令適合性・完全自動交信のコンテスト参加可否も未検証です。
+
+## Rev.A標準I/O（v0.2.0設計更新）
+
+- 標準構成：**Windows PC ＋ 無線機内蔵USB Audio ＋ USB仮想COM／CI-V CWメッセージ送信**。内蔵USBを利用できればUSBケーブル1本で接続する。
+- CW送信の優先順位は (1) **CI-V `17h` による無線機内蔵CW送出**、(2) **無線機内蔵USB仮想COM DTR/RTSキーイング**、(3) **簡易USB KEYユニットから無線機のKEY端子へ接点相当出力**。
+- **専用MCU/キーヤー基板、独立音声I/O基板は標準構成から除外**。CW受信・送信指示・ログ集計をPCソフトウェアに統合する。
+- 本版は**設計仕様のみを更新**。従来のログ集計コードは変更せず、USB通信・実送信はまだ実装していない。
+- 詳細：[`docs/USB_IO_DESIGN.md`](docs/USB_IO_DESIGN.md)、機種別設定草案：[`profiles/ic7300_usb_draft.json`](profiles/ic7300_usb_draft.json)。
 
 ## 実行環境
 
