@@ -1,4 +1,4 @@
-# 自動CWコンテスト交信装置 Rev.A — 設計仕様（v0.3.2-design / IC-7300基準）
+# 自動CWコンテスト交信装置 Rev.A — 設計仕様（v0.4.0 / IC-7300基準）
 
 更新：2026-11-05 / 開発状態：IC-7300専用CI-VとUSB AF録音・オフラインCW復号・承認付きFSMを試作。実RF未検証
 
@@ -86,3 +86,13 @@ QSOの一次記録は独自の監査可能な形式。ExcelレビューCSV、JAR
 - 開発の第一段階は受信録音からのオフライン選局。**本追補により自動送信を有効化するものではない。**
 - 国内JARLの完全自律参加可否は未確認。海外CQ WW 2026では自律ロボット運用が明示禁止だが、JARL規約と混同しない。
 - 詳細・出典: [`docs/PRECEDENTS_AUTOMATED_CW_2026-11-05.md`](docs/PRECEDENTS_AUTOMATED_CW_2026-11-05.md)。
+
+## v0.4.0 Windows GUI実装（2026-11-05）
+
+- Tkinter/ttkによる標準デスクトップGUIを実装。Windows EXE化の手順を整備し、ソースからは `python -m cwcontest desktop`で起動。
+- 設定ウィンドウに自局コールサイン、コンテスト（ALL JA/全市全郡）、送信ナンバー、バンドを追加。空欄の初期値から入力し、検査して `%LOCALAPPDATA%` 下の設定JSONに永続保存。
+- 起動時に別ウィンドウの交信ログを表示。CSVの更新を1秒ごとに確認し、変更時に一覧更新。完了・未完了・同一バンド同局の重複候補を区別。
+- 手動確定QSOをCSVへ追記する操作を追加。既存 `core.CSV_FIELDS` と互換。変更時も過去の交信記録は改変しない。
+- IC-7300の実USB通信・DeepCWのライブ認識・自動QSO状態機械とGUIは未接続。GUIに送信操作を設けず、RF送信は禁止。提出データは既存CLI（提出情報の別JSONが必要）。
+- PyInstaller `6.22.3`でWindows上でonefile EXE生成を想定。LinuxからWindows EXEを出力したとは主張しない。
+- 詳細: `docs/WINDOWS_DESKTOP.md`。

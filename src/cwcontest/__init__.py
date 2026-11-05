@@ -1,2 +1,2 @@
-"""JARL国内CWコンテスト用ログ集計・提出データ生成（試作）。"""
-__version__ = "0.1.0"
+"""JARL CW contest prototype, IC-7300 Windows desktop edition."""
+__version__ = "0.4.0"

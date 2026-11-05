@@ -3,3 +3,12 @@ __pycache__/
 .pytest_cache/
 output/
 *.em
+
+# Windows standalone build (generated files)
+.venv*/
+build/
+dist/
+*.spec
+# Runtime data is outside the source tree
+settings.json
+logs/

@@ -6,6 +6,10 @@ from .core import read_config, read_qsos, score_and_audit, jarlelog_r21, excel_c
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "desktop":
+        from .desktop import main as launch_desktop
+        launch_desktop()
+        return 0
     if len(sys.argv) > 1 and sys.argv[1] in {
         "radio-check", "cw-send", "cw-abort", "audio-devices", "audio-record", "decode-wav"
     }:
