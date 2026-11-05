@@ -6,6 +6,11 @@ from .core import read_config, read_qsos, score_and_audit, jarlelog_r21, excel_c
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] in {
+        "radio-check", "cw-send", "cw-abort", "audio-devices", "audio-record", "decode-wav"
+    }:
+        from .ic7300_cli import run
+        return run(sys.argv[1:])
     p = argparse.ArgumentParser(description="JARL国内CWコンテストログ試作ツール (送受信機能なし)")
     p.add_argument("command", choices=("audit", "export"))
     p.add_argument("--config", required=True)
